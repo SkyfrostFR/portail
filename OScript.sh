@@ -195,12 +195,14 @@ if [ \$HOST_UP = false ]; then
 fi
 
 $MOONLIGHT_BOOT_SCRIPT
-
+RESOLUTION=$(xrandr | grep '*' | awk '{print $1}')
+WIDTH=$(echo $RESOLUTION | cut -d'x' -f1)
+HEIGHT=$(echo $RESOLUTION | cut -d'x' -f2)
 if !(grep -q "BEGIN CERTIFICATE" "$MOON_CONFIG_FILE" && grep -q "BEGIN PRIVATE KEY" "$MOON_CONFIG_FILE"); then
 /usr/bin/moonlight pair $HOST_IP
 fi
 
-/usr/bin/moonlight stream $HOST_IP "desktop" --display-mode fullscreen
+/usr/bin/moonlight stream $HOST_IP "desktop" --display-mode fullscreen -width $WIDTH -height $HEIGHT
 
 EOF
 
@@ -300,6 +302,62 @@ ExecStart=/usr/bin/startx
 WantedBy=multi-user.target
 EOF
 
+log_info "7. Ecran de chargement."
+set -e
+
+
+# Variables
+THEME_NAME="ascii"
+THEME_DIR="/usr/share/plymouth/themes/$THEME_NAME"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+log_info "==> Installation de Plymouth..."
+pacman -S --noconfirm --needed plymouth
+
+log_info "==> Configuration de GRUB pour activer 'splash'..."
+GRUB_CFG="/etc/default/grub"
+if grep -q 'GRUB_CMDLINE_LINUX_DEFAULT' "$GRUB_CFG"; then
+  sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="[^"]*/& splash/' "$GRUB_CFG"
+else
+  echo 'GRUB_CMDLINE_LINUX_DEFAULT="quiet splash loglevel=3"' >> "$GRUB_CFG"
+fi
+
+echo "==> Régénération du grub.cfg..."
+grub-mkconfig -o /boot/grub/grub.cfg
+
+log_info "==> Création du thème $THEME_NAME..."
+mkdir -p "$THEME_DIR"
+
+# Fichier .plymouth
+cat > "$THEME_DIR/$THEME_NAME.plymouth" <<EOF
+[Plymouth Theme]
+Name=$THEME_NAME Boot
+Description=ASCII splash screen
+ModuleName=script
+
+[script]
+ImageDir=$THEME_DIR
+ScriptFile=$THEME_DIR/ascii.script
+EOF
+
+# Copier ton fichier ascii.script (qui doit être dans le même dossier que le script)
+if [[ -f "$SCRIPT_DIR/ascii.script" ]]; then
+  cp "$SCRIPT_DIR/ascii.script" "$THEME_DIR/ascii.script"
+  log_info "==> ascii.script copié dans $THEME_DIR"
+else
+  log_info "❌ ERREUR : ascii.script introuvable dans $SCRIPT_DIR"
+  exit 1
+fi
+
+log_info "==> Activation du thème $THEME_NAME..."
+plymouth-set-default-theme $THEME_NAME
+
+log_info "==> Reconstruction de l’initramfs..."
+mkinitcpio -P
+
+log_info "✅ Installation terminée."
+
+
 
 
 run_command "systemctl daemon-reload"
@@ -310,8 +368,10 @@ run_command "systemctl enable NetworkManager.service"
 run_command "systemctl daemon-reload"
 
 
+
+
 # --- 7. Finalisation ---
-log_info "7. Finalisation de l'installation."
+log_info "8. Finalisation de l'installation."
 log_info "Installation complète. Vous pouvez redémarrer la machine."
 log_info "Utilisez 'sudo reboot' pour redémarrer maintenant."
 log_info "Consultez les journaux avec : journalctl -u $MOONLIGHT_SERVICE"
