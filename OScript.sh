@@ -202,7 +202,7 @@ if !(grep -q "BEGIN CERTIFICATE" "$MOON_CONFIG_FILE" && grep -q "BEGIN PRIVATE K
 /usr/bin/moonlight pair $HOST_IP
 fi
 
-/usr/bin/moonlight stream $HOST_IP "desktop" --display-mode fullscreen -width $WIDTH -height $HEIGHT
+/usr/bin/moonlight stream $HOST_IP "desktop" --display-mode fullscreen -width $WIDTH -height $HEIGHT -fps $CLIENT_FPS -bitrate $CLIENT_BITRATE   -fullscreen -$CLIENT_RESOLUTION
 
 EOF
 
